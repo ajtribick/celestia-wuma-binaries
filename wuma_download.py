@@ -94,6 +94,7 @@ def apply_celestia(celestia_dir: str) -> Table:
 
     tbl['Name'] = tbl['Name'].astype('U')
     tbl['main_id'] = tbl['main_id'].astype('U')
+    tbl['sp_type'] = tbl['sp_type'].astype('U')
 
     gaia_ids = np.zeros(len(tbl), dtype=np.int64)
     cel_ids = np.zeros(len(tbl), dtype=np.uint32)
