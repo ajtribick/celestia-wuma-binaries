@@ -1,3 +1,4 @@
+Arpeggio==1.10.1
 astropy==4.2
 astroquery==0.4.1
 beautifulsoup4==4.9.3
