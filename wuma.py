@@ -3,6 +3,7 @@
 """Creates the W UMa catalog."""
 
 import argparse
+import os
 import os.path
 import string
 import sys
@@ -16,6 +17,7 @@ import numpy as np
 
 from spparse import parse_spectrum, unparse_spectrum
 from wuma_download import CATALOG_PATH, XREF_PATH, download_xref, map_names
+from wuma_model import CmodWriter, Geometry
 
 
 GREEKS = [
@@ -57,7 +59,7 @@ def merge_data() -> Table:
 
 
 def find_existing_names(celestia_dir: str, tbl: Table) -> Dict[int, List[str]]:
-    """Loads existing names for stars."""
+    """Loads existing names for stars from starnames.dat."""
     wuma_ids = set(tbl[np.logical_not(tbl['hip'].mask)]['hip'])
     names = {}
     with open(os.path.join(celestia_dir, 'data', 'starnames.dat'), 'r') as f:
@@ -79,7 +81,7 @@ def apply_cel_convention(name: str) -> Optional[str]:
     if name.startswith('* '):
         name = name[2:]
     elif name.startswith('V* MU') or name.startswith('V* NU'):
-        # cannot use this name in Celestia
+        # cannot use this name in Celestia, would be interpreted as Bayer
         return None
     elif name.startswith('V* '):
         name = name[3:]
@@ -142,11 +144,19 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
             sp_type = unparse_spectrum(parse_spectrum(row["sp_type"]))
             f.write(f'\tSpectralType "{sp_type}"\n')
         f.write(f'\tTemperature {row["T1"]} # from primary\n')
+        f.write(f'\tRadius {row["a"] * 696000}\n')
         meshname = model_filename(name if name is not None else row['Name'])
         f.write(f'\tMesh "{meshname}"\n')
+        f.write(f'\tTexture "wuma.jpg"\n')
         f.write(f'\tUniformRotation {{\n')
         f.write(f'\t\tPeriod {row["P"]*24}\n')
         f.write('\t}\n}\n')
+
+        geometry = Geometry(row['q'], row['f'])
+        with open(os.path.join('output', 'models', meshname), 'wb') as mf:
+            writer = CmodWriter(mf)
+            writer.write(geometry, "wuma.jpg")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Build W UMa catalog.')
@@ -154,5 +164,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     download_xref(args.celestia_dir)
+
+    try:
+        os.makedirs('output/models')
+    except FileExistsError:
+        pass
+
     tbl = merge_data()
-    create_stars(args.celestia_dir, sys.stdout, tbl)
+    with open(os.path.join('output', 'wuma.stc'), 'w') as f:
+        create_stars(args.celestia_dir, f, tbl)

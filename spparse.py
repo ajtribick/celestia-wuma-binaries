@@ -414,6 +414,8 @@ def parse_spectrum(sptype: str) -> int:
 def unparse_spectrum(code: int) -> str:
     """Turns a Celestia spectral type into a string."""
     category = code & 0xf000
+
+    # quick check for neutron stars and black holes
     if category == 0x2000:
         return 'Q'
     if category == 0x3000:
@@ -424,7 +426,6 @@ def unparse_spectrum(code: int) -> str:
     except ValueError:
         return '?'
 
-
     if mk == CelMkClass.Unknown:
         return '?'
 
@@ -434,6 +435,7 @@ def unparse_spectrum(code: int) -> str:
     if sc < CEL_UNKNOWN_SUBCLASS:
         sp += str(sc >> 4)
 
+    # white dwarfs don't have luminosity classes
     if mk >= CelMkClass.DA:
         return sp
 
