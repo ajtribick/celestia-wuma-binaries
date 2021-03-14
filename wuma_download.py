@@ -147,7 +147,9 @@ def apply_celestia(celestia_dir: str) -> Table:
                 ra[idx] += 2*np.pi
             dec[idx] = np.degrees(np.arcsin(pos[1] / d))
             dist[idx] = d
-            cel_exists[idx] = True
+            if not cel_exists[idx]:
+                cel_exists[idx] = True
+                cel_ids[idx] = hip
 
     tbl.add_columns([
         MaskedColumn(data=dist, name='dist', mask=np.isnan(dist)),
