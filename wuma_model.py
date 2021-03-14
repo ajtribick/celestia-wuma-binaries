@@ -324,6 +324,19 @@ class Geometry:
             np.array([x_max, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
         ))
 
+        # point to fix auto-centre
+        com = q/(q+1)
+        com_min = com - x_min
+        com_max = x_max - com
+        if com_min > com_max:
+            vertices.append(Vertex(
+                np.array([com+com_min, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
+            ))
+        else:
+            vertices.append(Vertex(
+                np.array([com-com_max, 0, 0]), np.array([-1, 0, 0]), np.array([0.5, 0])
+            ))
+
         return vertices
 
 

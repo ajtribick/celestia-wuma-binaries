@@ -113,8 +113,10 @@ def model_filename(name: str) -> str:
 
 def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
     """Creates the star data."""
+    print("Writing output files")
     tbl = tbl[np.logical_not(np.logical_or(tbl['a'].mask, tbl['dist'].mask))]
     cel_names = find_existing_names(celestia_dir, tbl)
+    total_output = 0
     for row in tbl:
         f.write(f'\n# {row["Name"]}\n')
         name = apply_cel_convention(row['Name'])
@@ -156,6 +158,9 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
         with open(os.path.join('output', 'models', meshname), 'wb') as mf:
             writer = CmodWriter(mf)
             writer.write(geometry, "wuma.jpg")
+
+        total_output += 1
+    print(f'Output {total_output} binaries')
 
 
 if __name__ == '__main__':
