@@ -102,8 +102,8 @@ def _init_angular(samples: int) -> Tuple[np.ndarray, np.ndarray]:
     return cos_vals, sin_vals
 
 
-X_SAMPLES = 16
-THETA_SAMPLES = 8
+X_SAMPLES = 72
+THETA_SAMPLES = 12
 COS_VALS, SIN_VALS = _init_angular(THETA_SAMPLES)
 U_VALS = np.linspace(0, 0.25, THETA_SAMPLES)
 

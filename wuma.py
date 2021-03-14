@@ -145,11 +145,23 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
             # Gaia DR2 add-on and then unparse it back to a Celestia type
             sp_type = unparse_spectrum(parse_spectrum(row["sp_type"]))
             f.write(f'\tSpectralType "{sp_type}"\n')
-        f.write(f'\tTemperature {row["T1"]} # from primary\n')
+
+        temp = row["T1"]
+        # midpoints from star.cpp
+        if temp > 10010:
+            texture = 'bstar.*'
+        elif temp > 6070:
+            texture = 'astar.*'
+        elif temp > 3895:
+            texture = 'gstar.*'
+        else:
+            texture = 'mstar.*'
+
+        f.write(f'\tTemperature {temp} # from primary\n')
         f.write(f'\tRadius {row["a"] * 696000}\n')
         meshname = model_filename(name if name is not None else row['Name'])
         f.write(f'\tMesh "{meshname}"\n')
-        f.write(f'\tTexture "wuma.jpg"\n')
+        f.write(f'\tTexture "{texture}"\n')
         f.write(f'\tUniformRotation {{\n')
         f.write(f'\t\tPeriod {row["P"]*24}\n')
         f.write('\t}\n}\n')
