@@ -17,6 +17,7 @@ import numpy as np
 
 from spparse import parse_spectrum, unparse_spectrum
 from wuma_download import CATALOG_PATH, XREF_PATH, download_xref, map_names
+from wuma_frame import convert_orientation
 from wuma_model import CmodWriter, Geometry
 
 
@@ -165,7 +166,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
         else:
             texture = 'mstar.*'
 
-        f.write(f'\tTemperature {temp} # from primary\n')
+        f.write(f'\tTemperature {temp} # secondary = {row["T2"]} K\n')
 
         geometry = Geometry(row['q'], row['f'])
 
@@ -175,6 +176,11 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
         f.write(f'\tTexture "{texture}"\n')
         f.write(f'\tUniformRotation {{\n')
         f.write(f'\t\tPeriod {row["P"]*24:.9}\n')
+
+        elements = convert_orientation(row['ra'], row['dec'], row['i'])
+        f.write(f'\t\tInclination {elements[1]:.3f}\n')
+        f.write(f'\t\tAscendingNode {elements[2]:.3f}\n')
+
         f.write('\t}\n}\n')
 
         with open(os.path.join('output', 'models', meshname), 'wb') as mf:
