@@ -252,10 +252,29 @@ class Geometry:
     def __init__(self, q: float, f: float):
         if f <= 0.0001:
             f = 0.0001
-        self.vertices = Geometry._compute_vertices(q, f)
+        vertices, radius = Geometry._compute_vertices(q, f)
+        self.vertices = vertices
+        self.radius = radius
 
     @staticmethod
-    def _compute_vertices(q: float, f: float) -> List[Vertex]:
+    def _fix_auto_center(vertices: List[Vertex], q: float, x_min: float, x_max: float) -> float:
+        # point to fix auto-centre in Celestia
+        com = q/(q+1)
+        com_min = com - x_min
+        com_max = x_max - com
+        if com_min > com_max:
+            vertices.append(Vertex(
+                np.array([com+com_min, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
+            ))
+            return com_min
+        else:
+            vertices.append(Vertex(
+                np.array([com-com_max, 0, 0]), np.array([-1, 0, 0]), np.array([0.5, 0])
+            ))
+            return com_max
+
+    @staticmethod
+    def _compute_bounds(q: float, f: float):
         l1, l2, l3 = lagrange_points(q)
         # get dimensionless potential of common envelope
         phi1 = roche([l1, 0, 0], q)
@@ -270,7 +289,32 @@ class Geometry:
         x_min = _extent_min(phi, l3, q)
         x_max = _extent_max(phi, l2, q)
 
-        x_values = np.linspace(x_min, x_max, X_SAMPLES+1, endpoint=False)[1:]
+        # distribute points as if the envelope were two spheres touching at L1
+        r1 = l1 - x_min
+        r2 = x_max - l1
+        minor_points = int((X_SAMPLES-1) * (2+r2/r1)/6)
+        major_points = X_SAMPLES - 1 - minor_points
+        x_values = np.empty(X_SAMPLES)
+        # samples for primary
+        x_values[:major_points] = (
+            (1-np.cos(np.linspace(0, np.pi, major_points+1, endpoint=False)[1:]))*r1/2 + x_min
+        )
+        # sample neck
+        x_values[major_points] = l1
+        # samples for secondary
+        x_values[major_points+1:] = (
+            (1-np.cos(np.linspace(0, np.pi, minor_points+1, endpoint=False)[1:]))*r2/2 + l1
+        )
+
+        return x_min, x_max, x_values, phi
+
+    @staticmethod
+    def _compute_vertices(q: float, f: float) -> List[Vertex]:
+        x_min, x_max, x_values, phi = Geometry._compute_bounds(q, f)
+
+        # boundary for intermediate point approximation
+        bound_cx = (x_min+x_max) / 2
+        bound_r = (x_max-x_min) / 2
 
         # x_min endpoint
         vertices = [Vertex(
@@ -284,16 +328,18 @@ class Geometry:
         for x in x_values:
             v = (x-x_min)/(x_max-x_min)
             outer = np.sqrt(bound_r*bound_r - (x - bound_cx)**2)
-            # compute first quadrant
+            # compute first quadrant, saving data to mirror for other quadrants
             for theta_i in range(THETA_SAMPLES):
                 rho = _surface(phi, x, theta_i, outer, q)
                 position = np.array([x, rho*COS_VALS[theta_i], rho*SIN_VALS[theta_i]])
                 normal = approx_fprime(position, roche, 1e-6, q)
-                normal = -normal / norm(normal)
+                # force alignment of normal components at 0 and 90 degrees
                 if theta_i == 0:
                     normal[2] = 0
                 elif theta_i == THETA_SAMPLES-1:
                     normal[1] = 0
+                # dimensionless potential increases towards the surface, so reverse for normal
+                normal = -normal / norm(normal)
                 quad_positions[theta_i] = position
                 quad_normals[theta_i] = normal
                 vertices.append(Vertex(position, normal, np.array([U_VALS[theta_i], v])))
@@ -324,20 +370,9 @@ class Geometry:
             np.array([x_max, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
         ))
 
-        # point to fix auto-centre
-        com = q/(q+1)
-        com_min = com - x_min
-        com_max = x_max - com
-        if com_min > com_max:
-            vertices.append(Vertex(
-                np.array([com+com_min, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
-            ))
-        else:
-            vertices.append(Vertex(
-                np.array([com-com_max, 0, 0]), np.array([-1, 0, 0]), np.array([0.5, 0])
-            ))
+        radius = Geometry._fix_auto_center(vertices, q, x_min, x_max)
 
-        return vertices
+        return vertices, radius
 
 
 # based on modelfile.cpp

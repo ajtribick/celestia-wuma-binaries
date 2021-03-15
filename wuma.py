@@ -111,6 +111,11 @@ def model_filename(name: str) -> str:
     return ''.join(process_char(c) for c in name) + '.cmod'
 
 
+def _format(n: float, p: int) -> str:
+    # formats a float with a maximum number of decimal places
+    return f'{n:.{p}f}'.rstrip('0').rstrip('.')
+
+
 def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
     """Creates the star data."""
     print("Writing output files")
@@ -118,7 +123,10 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
     cel_names = find_existing_names(celestia_dir, tbl)
     total_output = 0
     for row in tbl:
-        f.write(f'\n# {row["Name"]}\n')
+        f.write(
+            f'\n# {row["Name"]}: q={_format(row["q"], 3)}, a={_format(row["a"], 2)}, '
+            f'f={_format(row["f"], 6)}\n'
+        )
         name = apply_cel_convention(row['Name'])
         if row['cel_exists']:
             f.write(f'Modify {row["hip"]}')
@@ -137,7 +145,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
             f.write(f'\tRA {row["ra"]}\n')
             f.write(f'\tDec {row["dec"]}\n')
             f.write(f'\tDistance {dist}\n')
-            f.write(f'\tAppMag {row["flux"]}\n')
+            f.write(f'\tAppMag {_format(row["flux"], 3)}\n')
             if row["sp_type"] is np.ma.masked:
                 f.write('\tSpectralType "?"\n')
         if row["sp_type"] is not np.ma.masked:
@@ -158,15 +166,17 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
             texture = 'mstar.*'
 
         f.write(f'\tTemperature {temp} # from primary\n')
-        f.write(f'\tRadius {row["a"] * 696000}\n')
+
+        geometry = Geometry(row['q'], row['f'])
+
+        f.write(f'\tRadius {row["a"] * geometry.radius * 696000:.0f}\n')
         meshname = model_filename(name if name is not None else row['Name'])
         f.write(f'\tMesh "{meshname}"\n')
         f.write(f'\tTexture "{texture}"\n')
         f.write(f'\tUniformRotation {{\n')
-        f.write(f'\t\tPeriod {row["P"]*24}\n')
+        f.write(f'\t\tPeriod {row["P"]*24:.9}\n')
         f.write('\t}\n}\n')
 
-        geometry = Geometry(row['q'], row['f'])
         with open(os.path.join('output', 'models', meshname), 'wb') as mf:
             writer = CmodWriter(mf)
             writer.write(geometry, "wuma.jpg")
