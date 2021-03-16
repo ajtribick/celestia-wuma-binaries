@@ -2,7 +2,6 @@
 
 """Creates the W UMa catalog."""
 
-import argparse
 import os
 import os.path
 import string
@@ -177,9 +176,9 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
         f.write(f'\tUniformRotation {{\n')
         f.write(f'\t\tPeriod {row["P"]*24:.9}\n')
 
-        elements = convert_orientation(row['ra'], row['dec'], row['i'])
-        f.write(f'\t\tInclination {elements[1]:.3f}\n')
-        f.write(f'\t\tAscendingNode {elements[2]:.3f}\n')
+        inc, node = convert_orientation(row['ra'], row['dec'], row['i'])
+        f.write(f'\t\tInclination {inc:.3f}\n')
+        f.write(f'\t\tAscendingNode {node:.3f}\n')
 
         f.write('\t}\n}\n')
 
@@ -192,6 +191,8 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
 
 
 if __name__ == '__main__':
+    import argparse
+
     parser = argparse.ArgumentParser(description='Build W UMa catalog.')
     parser.add_argument('-c', '--celestia-dir', required=True, type=str)
     args = parser.parse_args()
