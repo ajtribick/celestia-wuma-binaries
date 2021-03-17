@@ -37,6 +37,58 @@ from wuma_frame import convert_orientation
 from wuma_model import CmodWriter, Geometry
 
 
+VERSION = 1, 0, 0
+
+HEADER = """# W Ursae Majoris binaries for Celestia
+# -------------------------------------
+#
+# Generated from the WUMaCat database (Latković et al., 2021) together with
+# stellar data and cross-reference information from SIMBAD and from Gaia EDR2
+# (Gaia Collaboration et al., 2018). Processed for Celestia by Andrew Tribick.
+#
+# For further information and generation scripts, see the source repository at
+# https://github.com/ajtribick/celestia-wuma-binaries
+#
+# References:
+#
+# * Astropy Collaboration et al. (2013), A&A 558, id.A33 "Astropy: A community
+#   Python package for astronomy"
+#
+# * Bailer-Jones et al. (2018), AJ 156(2), id.58 "Estimating distances from
+#   parallaxes. IV. Distances to 1.33 billion stars in *Gaia* data release 2"
+#
+# * Evans et al. (2018), A&A 616, id. A4 "*Gaia* Data Release 2: Photometric
+#   content and validation"
+#
+# * Gaia Collaboration et al. (2016), A&A 595, id.A1, "The *Gaia* mission"
+#
+# * Gaia Collaboration et al. (2018), A&A 616, id.A1, "*Gaia* Data Release 2.
+#   Summary of the contents and survey properties"
+#
+# * Harris et al. (2020), Nature 585, 357–362 "Array programming with NumPy"
+#
+# * Latković et al. (2021), "Statistics of 700 individually studied W UMa
+#   stars"
+#
+# * Virtanen et al. (2020), Nature Methods 17(3), 261–272 "SciPy 1.0:
+#   Fundamental Algorithms for Scientific Computing in Python"
+#
+# Acknowledgements:
+#
+# This work has made use of data from the European Space Agency (ESA) mission
+# Gaia (https://www.cosmos.esa.int/gaia), processed by the Gaia Data
+# Processing and Analysis Consortium (DPAC,
+# https://www.cosmos.esa.int/web/gaia/dpac/consortium). Funding for the DPAC
+# has been provided by national institutions, in particular the institutions
+# participating in the Gaia Multilateral Agreement.
+#
+# This work has made use of the SIMBAD database, operated at CDS, Strasbourg,
+# France.
+#
+# This work made use of [Astropy](http://www.astropy.org), a community-
+# developed core Python package for Astronomy.
+"""
+
 GREEKS = [
     ('alf', 'ALF'),
     ('bet', 'BET'),
@@ -209,6 +261,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
 
 if __name__ == '__main__':
     import argparse
+    import zipfile
 
     parser = argparse.ArgumentParser(description='Build W UMa catalog.')
     parser.add_argument('-c', '--celestia-dir', required=True, type=str)
@@ -223,4 +276,15 @@ if __name__ == '__main__':
 
     tbl = merge_data()
     with open(os.path.join('output', 'wuma.stc'), 'w') as f:
+        f.write(HEADER)
         create_stars(args.celestia_dir, f, tbl)
+
+    print("Creating archive")
+    archive_name = f'wuma-{VERSION[0]}.{VERSION[1]}.{VERSION[2]}'
+    with zipfile.ZipFile(
+        f'{archive_name}.zip', 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9
+    ) as z:
+        for root, dirs, files in os.walk('output'):
+            for file in files:
+                fs_path = os.path.join(root, file)
+                z.write(fs_path, os.path.join(archive_name, os.path.relpath(fs_path, 'output')))

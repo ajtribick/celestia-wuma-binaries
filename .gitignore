@@ -1,5 +1,7 @@
 /data
 /myenv
-/output
+/output/models
+/output/wuma.stc
 /__pycache__
 /.vscode
+/wuma-*.zip
