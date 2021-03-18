@@ -61,7 +61,7 @@ f = 0.6  # fillout factor
 g = Geometry(q, f)
 print(f'Radius factor {g.radius}')
 
-with open('output.cmod', 'rb') as f:
+with open('output.cmod', 'wb') as f:
    c = CmodWriter(f)
    c.write(g)
 ```
