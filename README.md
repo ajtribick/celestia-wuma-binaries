@@ -55,8 +55,8 @@ Custom contact binary meshes can be generated using the classes in the
 ```python
 from wuma_model import CmodWriter, Geometry
 
-q = 0.3  # mass ratio
-f = 0.6  # fillout factor
+q = 0.3  # mass ratio M2/M1, in the range (0,1)
+f = 0.6  # fillout factor, in the range [0,1]
 
 g = Geometry(q, f)
 print(f'Radius factor {g.radius}')
