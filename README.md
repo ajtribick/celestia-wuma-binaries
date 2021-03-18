@@ -79,10 +79,10 @@ ra = 123.45  # in degrees
 dec = -67.8  # in degrees
 inc = 90.12  # in degrees
 
-inc_cel, node_cel = convert_orientation(ra, dec, inc)
+inc_ecl, node_ecl = convert_orientation(ra, dec, inc)
 ```
 
-The values in `inc_cel` and `node_cel` can be used as the `Inclination` and
+The values in `inc_ecl` and `node_ecl` can be used as the `Inclination` and
 `AscendingNode` parameters in the `UniformRotation` block in the .stc file.
 
 ## References
