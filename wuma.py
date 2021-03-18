@@ -37,7 +37,7 @@ from wuma_frame import convert_orientation
 from wuma_model import CmodWriter, Geometry
 
 
-VERSION = 1, 0, 0
+VERSION = 1, 0, 1
 
 HEADER = """# W Ursae Majoris binaries for Celestia
 # -------------------------------------
@@ -116,6 +116,7 @@ GREEKS = [
     ('ome', 'OME'),
 ]
 
+
 def merge_data() -> Table:
     """Merges the W UMa and cross-reference data."""
 
@@ -185,6 +186,23 @@ def _format(n: float, p: int) -> str:
     return f'{n:.{p}f}'.rstrip('0').rstrip('.')
 
 
+def _guess_spectrum(temp: float) -> str:
+    # guesses spectrum from temperature, using midpoints of values in star.cpp
+    if temp >= 31500:
+        return "O"
+    if temp >= 10010:
+        return "B"
+    if temp >= 7295:
+        return "A"
+    if temp >= 6070:
+        return "F"
+    if temp >= 5330:
+        return "G"
+    if temp >= 3895:
+        return "K"
+    return "M"
+
+
 def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
     """Creates the star data."""
     print("Writing output files")
@@ -197,6 +215,20 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
             f'f={_format(row["f"], 6)}\n'
         )
         name = apply_cel_convention(row['Name'])
+
+        # Use the spectral types with the following preference:
+        # 1. SIMBAD
+        # 2. The value in stars.dat, unless unknown - no override necessary here
+        # 3. guess based on temperature
+
+        if row['sp_type'] is np.ma.masked:
+            sp_type = None
+        else:
+            sp_type = unparse_spectrum(parse_spectrum(row['sp_type']))
+            if sp_type == '?':
+                sp_type = None
+        sp_comment = ''
+
         if row['cel_exists']:
             f.write(f'Modify {row["hip"]}')
             if name is not None:
@@ -204,7 +236,12 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
                 if name not in names:
                     f.write(f' "{":".join(names + [name])}"')
             f.write('\n{\n')
+            if sp_type is None and row['needs_spectrum']:
+                sp_type = _guess_spectrum(row['T1'])
+                sp_comment = ' # from primary temperature'
         else:
+            if row['flux'] is np.ma.masked:
+                continue
             if row['hip'] is not np.ma.masked:
                 f.write(f'{row["hip"]} ')
             elif name is None:
@@ -215,13 +252,12 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
             f.write(f'\tDec {row["dec"]}\n')
             f.write(f'\tDistance {dist}\n')
             f.write(f'\tAppMag {_format(row["flux"], 3)}\n')
-            if row["sp_type"] is np.ma.masked:
-                f.write('\tSpectralType "?"\n')
-        if row["sp_type"] is not np.ma.masked:
-            # Celestia's spectral type parser is relatively basic, so use the parser from the
-            # Gaia DR2 add-on and then unparse it back to a Celestia type
-            sp_type = unparse_spectrum(parse_spectrum(row["sp_type"]))
-            f.write(f'\tSpectralType "{sp_type}"\n')
+            if sp_type is None:
+                sp_type = _guess_spectrum(row["T1"])
+                sp_comment = ' # from primary temperature'
+
+        if sp_type is not None:
+            f.write(f'\tSpectralType "{sp_type}"{sp_comment}\n')
 
         temp = row["T1"]
         # midpoints from star.cpp
@@ -241,7 +277,6 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
         f.write(f'\tRadius {row["a"] * geometry.radius * 696000:.0f}\n')
         meshname = model_filename(name if name is not None else row['Name'])
         f.write(f'\tMesh "{meshname}"\n')
-        f.write(f'\tTexture "{texture}"\n')
         f.write(f'\tUniformRotation {{\n')
         f.write(f'\t\tPeriod {row["P"]*24:.9}\n')
 
@@ -253,7 +288,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
 
         with open(os.path.join('output', 'models', meshname), 'wb') as mf:
             writer = CmodWriter(mf)
-            writer.write(geometry, "wuma.jpg")
+            writer.write(geometry)
 
         total_output += 1
     print(f'Output {total_output} binaries')

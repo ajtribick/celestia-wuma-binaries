@@ -407,16 +407,7 @@ class CmodWriter:
     def _write_float1(self, value: float):
         self.f.write(S_FLOAT1.pack(ModelFileType.FLOAT1.value, value))
 
-    def _write_texture(self, source: str):
-        self.f.write(S_TEXTURE.pack(
-            ModelFileToken.TEXTURE.value,
-            0,
-            ModelFileType.STRING.value,
-            len(source),
-        ))
-        self.f.write(source.encode('utf-8'))
-
-    def _write_material(self, texture: str):
+    def _write_material(self):
         self._write_token(ModelFileToken.MATERIAL)
         self._write_token(ModelFileToken.DIFFUSE)
         self._write_color(0, 0, 0)
@@ -424,7 +415,6 @@ class CmodWriter:
         self._write_color(1, 1, 1)
         self._write_token(ModelFileToken.OPACITY)
         self._write_float1(1)
-        self._write_texture(texture)
         self._write_token(ModelFileToken.END_MATERIAL)
 
     def _write_vertex_desc(
@@ -463,8 +453,8 @@ class CmodWriter:
 
         self._write_token(ModelFileToken.END_MESH)
 
-    def write(self, geometry: Geometry, texture: str):
+    def write(self, geometry: Geometry):
         """Write the given model geometry to the file."""
         self.f.write(CEL_MODEL_HEADER_BINARY)
-        self._write_material(texture)
+        self._write_material()
         self._write_mesh(geometry)

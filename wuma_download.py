@@ -36,6 +36,7 @@ import requests
 
 from scipy.linalg import norm
 
+from spparse import CelMkClass
 from wuma_frame import EQUATORIAL_TRANSFORM
 
 CATALOG_URL = 'https://wumacat.aob.rs/Downloads/Catalog'
@@ -112,6 +113,7 @@ def apply_celestia(celestia_dir: str) -> Table:
     tbl['Name'] = tbl['Name'].astype('U')
     tbl['main_id'] = tbl['main_id'].astype('U')
     tbl['sp_type'] = tbl['sp_type'].astype('U')
+    tbl['sp_type'].mask = np.logical_or(tbl['sp_type'].mask, tbl['sp_type'] == '')
 
     gaia_ids = np.zeros(len(tbl), dtype=np.int64)
     cel_ids = np.zeros(len(tbl), dtype=np.uint32)
@@ -119,6 +121,7 @@ def apply_celestia(celestia_dir: str) -> Table:
     ra = np.full(len(tbl), np.nan, dtype=np.float64)
     dec = np.full(len(tbl), np.nan, dtype=np.float64)
     dist = np.full(len(tbl), np.nan, dtype=np.float64)
+    needs_spectrum = np.full(len(tbl), False, dtype=np.bool_)
 
     id_idx = {}
 
@@ -146,12 +149,12 @@ def apply_celestia(celestia_dir: str) -> Table:
         db_type, db_version, db_len = struct.unpack('<8sHI', header)
         if db_type != b'CELSTARS' or db_version != 0x0100:
             raise ValueError("Bad header format")
-        s = struct.Struct('<I3f4x')
+        s = struct.Struct('<I3fhH')
         for _ in range(db_len):
             star = f.read(20)
             if len(star) != 20:
                 raise EOFError("Unexpected end-of-file")
-            hip, x, y, z = s.unpack(star)
+            hip, x, y, z, v_mag, sp_type = s.unpack(star)
             try:
                 idx = id_idx[hip]
             except KeyError:
@@ -164,15 +167,19 @@ def apply_celestia(celestia_dir: str) -> Table:
                 ra[idx] += 2*np.pi
             dec[idx] = np.degrees(np.arcsin(pos[1] / d))
             dist[idx] = d
+
             if not cel_exists[idx]:
                 cel_exists[idx] = True
                 cel_ids[idx] = hip
+                if (sp_type & 0xff00) == CelMkClass.Unknown:
+                    needs_spectrum[idx] = True
 
     tbl.add_columns([
         MaskedColumn(data=dist, name='dist', mask=np.isnan(dist)),
         MaskedColumn(data=cel_ids, name='hip', mask=cel_ids == 0),
         MaskedColumn(data=gaia_ids, name='gaia', mask=gaia_ids == 0),
         Column(data=cel_exists, name='cel_exists'),
+        Column(data=needs_spectrum, name='needs_spectrum'),
     ])
 
     tbl['ra'] = np.where(np.isnan(ra), tbl['ra'], ra)

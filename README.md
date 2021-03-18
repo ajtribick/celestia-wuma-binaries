@@ -63,7 +63,7 @@ print(f'Radius factor {g.radius}')
 
 with open('output.cmod', 'rb') as f:
    c = CmodWriter(f)
-   c.write(g, "texture.jpg")
+   c.write(g)
 ```
 
 The "radius factor" is a value which should be multiplied by the binary's

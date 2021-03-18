@@ -444,9 +444,7 @@ def unparse_spectrum(code: int) -> str:
     except ValueError:
         return sp
 
-    if lum == CelLumClass.Ia0:
-        sp += 'Ia-0'
-    elif lum != CelLumClass.Unknown:
+    if lum != CelLumClass.Unknown:
         sp += lum.name
 
     return sp
