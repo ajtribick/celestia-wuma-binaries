@@ -1,5 +1,7 @@
 # W Ursae Majoris binaries for Celestia
 
+![Image of the W Ursae Majoris system in Celestia](images/wuma.jpg)
+
 This repository contains scripts to generate W Ursae Majoris binaries for
 Celestia, based on the [WUMaCat](https://wumacat.aob.rs) database. Each binary
 is represented as a single star in Celestia, with a custom mesh giving it the
