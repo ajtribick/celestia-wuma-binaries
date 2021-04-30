@@ -21,10 +21,13 @@ import gzip
 import os
 import os.path
 import struct
+from typing import BinaryIO, Mapping, Optional, Tuple
 
 from astropy.io import votable
 import astropy.io.ascii as io_ascii
 from astropy.table import Column, MaskedColumn, Table, join, vstack
+
+from astroquery.gaia import Gaia
 
 import numpy as np
 
@@ -102,6 +105,72 @@ def download_simbad():
     job.delete()
 
 
+def _map_ids(tbl: Table) -> Mapping[int, int]:
+    gaia_ids = np.zeros(len(tbl), dtype=np.int64)
+    cel_ids = np.zeros(len(tbl), dtype=np.uint32)
+    id_idx = {}
+
+    for i, ids in enumerate(tbl['ids']):
+        for ident in ids.split('|'):
+            if ident.startswith('HIP'):
+                hip = int(ident[3:].strip())
+                assert hip not in id_idx
+                id_idx[hip] = i
+                cel_ids[i] = hip
+            elif ident.startswith('TYC'):
+                tycs = [int(t) for t in ident[3:].strip().split('-')]
+                tyc = tycs[0] + tycs[1]*10000 + tycs[2]*1000000000
+                assert tyc not in id_idx
+                id_idx[tyc] = i
+                if cel_ids[i] == 0:
+                    cel_ids[i] = tyc
+            elif ident.startswith('Gaia DR2'):
+                gaia_ids[i] = int(ident[8:].strip())
+
+    tbl.add_columns([
+        MaskedColumn(data=gaia_ids, name='gaia'),
+        MaskedColumn(data=cel_ids, name='hip'),
+    ])
+
+    return id_idx
+
+
+def _check_header(f: BinaryIO) -> int:
+    header = f.read(14)
+    if len(header) != 14:
+        raise EOFError("Unexpected end-of-file")
+    db_type, db_version, db_len = struct.unpack('<8sHI', header)
+    if db_type != b'CELSTARS' or db_version != 0x0100:
+        raise ValueError("Bad header format")
+    return db_len
+
+
+STAR_FORMAT = struct.Struct('<I3fhH')
+
+
+def _process_star(
+    f: BinaryIO,
+    id_idx: Mapping[int, int],
+) -> Optional[Tuple[int, int, float, float, float, int]]:
+    star = f.read(20)
+    if len(star) != 20:
+        raise EOFError("Unexpected end-of-file")
+    hip, x, y, z, _v_mag, sp_type = STAR_FORMAT.unpack(star)
+    try:
+        idx = id_idx[hip]
+    except KeyError:
+        return None
+
+    pos = EQUATORIAL_TRANSFORM.apply([x, y, z])
+    dist = norm(pos)
+    ra = np.degrees(np.arctan2(-pos[2], pos[0]))
+    if ra < 0:
+        ra += 2*np.pi
+    dec = np.degrees(np.arcsin(pos[1] / dist))
+
+    return idx, hip, ra, dec, dist, sp_type
+
+
 def apply_celestia(celestia_dir: str) -> Table:
     """Adds RA and Dec information from Celestia."""
 
@@ -113,75 +182,36 @@ def apply_celestia(celestia_dir: str) -> Table:
     tbl['sp_type'] = tbl['sp_type'].astype('U')
     tbl['sp_type'].mask = np.logical_or(tbl['sp_type'].mask, tbl['sp_type'] == '')
 
-    gaia_ids = np.zeros(len(tbl), dtype=np.int64)
-    cel_ids = np.zeros(len(tbl), dtype=np.uint32)
-    cel_exists = np.full(len(tbl), False, dtype=np.bool_)
-    ra = np.full(len(tbl), np.nan, dtype=np.float64)
-    dec = np.full(len(tbl), np.nan, dtype=np.float64)
-    dist = np.full(len(tbl), np.nan, dtype=np.float64)
-    needs_spectrum = np.full(len(tbl), False, dtype=np.bool_)
-
-    id_idx = {}
-
-    for i, ids in enumerate(tbl['ids']):
-        for id in ids.split('|'):
-            if id.startswith('HIP'):
-                hip = int(id[3:].strip())
-                assert hip not in id_idx
-                id_idx[hip] = i
-                cel_ids[i] = hip
-            elif id.startswith('TYC'):
-                tycs = [int(t) for t in id[3:].strip().split('-')]
-                tyc = tycs[0] + tycs[1]*10000 + tycs[2]*1000000000
-                assert tyc not in id_idx
-                id_idx[tyc] = i
-                if cel_ids[i] == 0:
-                    cel_ids[i] = tyc
-            elif id.startswith('Gaia DR2'):
-                gaia_ids[i] = int(id[8:].strip())
-
-    with open(os.path.join(celestia_dir, 'data', 'stars.dat'), 'rb') as f:
-        header = f.read(14)
-        if len(header) != 14:
-            raise EOFError("Unexpected end-of-file")
-        db_type, db_version, db_len = struct.unpack('<8sHI', header)
-        if db_type != b'CELSTARS' or db_version != 0x0100:
-            raise ValueError("Bad header format")
-        s = struct.Struct('<I3fhH')
-        for _ in range(db_len):
-            star = f.read(20)
-            if len(star) != 20:
-                raise EOFError("Unexpected end-of-file")
-            hip, x, y, z, v_mag, sp_type = s.unpack(star)
-            try:
-                idx = id_idx[hip]
-            except KeyError:
-                continue
-
-            pos = EQUATORIAL_TRANSFORM.apply([x, y, z])
-            d = norm(pos)
-            ra[idx] = np.degrees(np.arctan2(-pos[2], pos[0]))
-            if ra[idx] < 0:
-                ra[idx] += 2*np.pi
-            dec[idx] = np.degrees(np.arcsin(pos[1] / d))
-            dist[idx] = d
-
-            if not cel_exists[idx]:
-                cel_exists[idx] = True
-                cel_ids[idx] = hip
-                if (sp_type & 0xff00) == CelMkClass.UNKNOWN:
-                    needs_spectrum[idx] = True
+    id_idx = _map_ids(tbl)
 
     tbl.add_columns([
-        MaskedColumn(data=dist, name='dist', mask=np.isnan(dist)),
-        MaskedColumn(data=cel_ids, name='hip', mask=cel_ids == 0),
-        MaskedColumn(data=gaia_ids, name='gaia', mask=gaia_ids == 0),
-        Column(data=cel_exists, name='cel_exists'),
-        Column(data=needs_spectrum, name='needs_spectrum'),
+        MaskedColumn(data=np.full(len(tbl), np.nan, dtype=np.float64), name='dist'),
+        Column(data=np.full(len(tbl), False, dtype=np.bool_), name='cel_exists'),
+        Column(data=np.full(len(tbl), False, dtype=np.bool_), name='needs_spectrum'),
     ])
 
-    tbl['ra'] = np.where(np.isnan(ra), tbl['ra'], ra)
-    tbl['dec'] = np.where(np.isnan(dec), tbl['dec'], dec)
+    with open(os.path.join(celestia_dir, 'data', 'stars.dat'), 'rb') as f:
+        db_len = _check_header(f)
+        while db_len > 0:
+            db_len -= 1
+            star = _process_star(f, id_idx)
+            if star is None:
+                continue
+            idx, hip, ra, dec, dist, sp_type = star
+
+            tbl['ra'][idx] = ra
+            tbl['dec'][idx] = dec
+            tbl['dist'][idx] = dist
+
+            if not tbl['cel_exists'][idx]:
+                tbl['cel_exists'][idx] = True
+                tbl['hip'][idx] = hip
+                if (sp_type & 0xff00) == CelMkClass.UNKNOWN:
+                    tbl['needs_spectrum'][idx] = True
+
+    tbl['dist'].mask = np.isnan(tbl['dist'])
+    tbl['hip'].mask = tbl['hip'] == 0
+    tbl['gaia'].mask = tbl['gaia'] == 0
 
     return tbl
 
@@ -192,8 +222,6 @@ def download_gaia(tbl: Table):
     if os.path.isfile(GAIA_PATH):
         print('Gaia data already downloaded, skipping')
         return
-
-    from astroquery.gaia import Gaia
 
     print("Querying Gaia")
 
