@@ -20,11 +20,11 @@
 import os
 import os.path
 import string
-from typing import Dict, List, Optional, TextIO
+from typing import Dict, List, Optional, TextIO, Tuple
 import zipfile
 
 import astropy.io.ascii as io_ascii
-from astropy.table import Table, join
+from astropy.table import Row, Table, join
 from astropy import units
 
 import numpy as np
@@ -35,7 +35,7 @@ from .frame import convert_orientation
 from .model import make_geometry, write_cmod
 
 
-VERSION = 1, 0, 1
+VERSION = 1, 0, 2
 
 HEADER = """# W Ursae Majoris binaries for Celestia
 # -------------------------------------
@@ -204,7 +204,79 @@ def _guess_spectrum(temp: float) -> str:
     return sptype
 
 
-def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
+def _write_header(
+    f: TextIO, row: Row, name: Optional[str], cel_names: Dict[int, List[str]]
+) -> Optional[Tuple[Optional[str], str]]:
+    # Use the spectral types with the following preference:
+    # 1. SIMBAD
+    # 2. The value in stars.dat, unless unknown - no override necessary here
+    # 3. guess based on temperature
+
+    if row['sp_type'] is np.ma.masked:
+        sp_type = None
+    else:
+        sp_type = unparse_spectrum(parse_spectrum(row['sp_type']))
+        if sp_type == '?':
+            sp_type = None
+    sp_comment = ''
+
+    if row['cel_exists']:
+        f.write(f'Modify {row["hip"]}')
+        if name is not None:
+            names = cel_names.get(row['hip'], [])
+            if name not in names:
+                f.write(f' "{":".join(names + [name])}"')
+        f.write('\n{\n')
+        if sp_type is None and row['needs_spectrum']:
+            sp_type = _guess_spectrum(row['T1'])
+            sp_comment = ' # from primary temperature'
+    else:
+        if row['flux'] is np.ma.masked:
+            return None
+        if row['hip'] is not np.ma.masked:
+            f.write(f'{row["hip"]} ')
+        elif name is None:
+            return None
+        dist = (row["dist"]*units.pc).to(units.lyr).to_value()
+        f.write(f'"{name}"\n{{\n')
+        f.write(f'\tRA {row["ra"]:.9}\n')
+        f.write(f'\tDec {row["dec"]:.9}\n')
+        f.write(f'\tDistance {dist:.9}\n')
+        f.write(f'\tAppMag {_format(row["flux"], 3)}\n')
+        if sp_type is None:
+            sp_type = _guess_spectrum(row["T1"])
+            sp_comment = ' # from primary temperature'
+
+    return sp_type, sp_comment
+
+
+def _write_common_details(
+    f: TextIO, row: Row, name: Optional[str], sp_type: Optional[str], sp_comment: str
+) -> None:
+    if sp_type is not None:
+        f.write(f'\tSpectralType "{sp_type}"{sp_comment}\n')
+
+    f.write(f'\tTemperature {row["T1"]} # secondary = {row["T2"]} K\n')
+
+    geometry = make_geometry(row['q'], row['f'])
+
+    f.write(f'\tRadius {row["a"] * geometry.radius * 696000:.0f}\n')
+    meshname = _model_filename(name if name is not None else row['Name'])
+    f.write(f'\tMesh "{meshname}"\n')
+    f.write('\tUniformRotation {\n')
+    f.write(f'\t\tPeriod {row["P"]*24:.9}\n')
+
+    inc, node = convert_orientation(row['ra'], row['dec'], row['i'])
+    f.write(f'\t\tInclination {inc:.3f}\n')
+    f.write(f'\t\tAscendingNode {node:.3f}\n')
+
+    f.write('\t}\n}\n')
+
+    with open(os.path.join('output', 'models', meshname), 'wb') as mf:
+        write_cmod(mf, geometry)
+
+
+def create_stars(celestia_dir: str, f: TextIO, tbl: Table) -> None:
     """Creates the star data."""
     print("Writing output files")
     tbl = tbl[np.logical_not(np.logical_or(tbl['a'].mask, tbl['dist'].mask))]
@@ -217,69 +289,14 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
         )
         name = apply_cel_convention(row['Name'])
 
-        # Use the spectral types with the following preference:
-        # 1. SIMBAD
-        # 2. The value in stars.dat, unless unknown - no override necessary here
-        # 3. guess based on temperature
+        spectrum_info = _write_header(f, row, name, cel_names)
+        if spectrum_info is None:
+            continue
 
-        if row['sp_type'] is np.ma.masked:
-            sp_type = None
-        else:
-            sp_type = unparse_spectrum(parse_spectrum(row['sp_type']))
-            if sp_type == '?':
-                sp_type = None
-        sp_comment = ''
-
-        if row['cel_exists']:
-            f.write(f'Modify {row["hip"]}')
-            if name is not None:
-                names = cel_names.get(row['hip'], [])
-                if name not in names:
-                    f.write(f' "{":".join(names + [name])}"')
-            f.write('\n{\n')
-            if sp_type is None and row['needs_spectrum']:
-                sp_type = _guess_spectrum(row['T1'])
-                sp_comment = ' # from primary temperature'
-        else:
-            if row['flux'] is np.ma.masked:
-                continue
-            if row['hip'] is not np.ma.masked:
-                f.write(f'{row["hip"]} ')
-            elif name is None:
-                continue
-            dist = (row["dist"]*units.pc).to(units.lyr).to_value()
-            f.write(f'"{name}"\n{{\n')
-            f.write(f'\tRA {row["ra"]}\n')
-            f.write(f'\tDec {row["dec"]}\n')
-            f.write(f'\tDistance {dist}\n')
-            f.write(f'\tAppMag {_format(row["flux"], 3)}\n')
-            if sp_type is None:
-                sp_type = _guess_spectrum(row["T1"])
-                sp_comment = ' # from primary temperature'
-
-        if sp_type is not None:
-            f.write(f'\tSpectralType "{sp_type}"{sp_comment}\n')
-
-        f.write(f'\tTemperature {row["T1"]} # secondary = {row["T2"]} K\n')
-
-        geometry = make_geometry(row['q'], row['f'])
-
-        f.write(f'\tRadius {row["a"] * geometry.radius * 696000:.0f}\n')
-        meshname = _model_filename(name if name is not None else row['Name'])
-        f.write(f'\tMesh "{meshname}"\n')
-        f.write('\tUniformRotation {\n')
-        f.write(f'\t\tPeriod {row["P"]*24:.9}\n')
-
-        inc, node = convert_orientation(row['ra'], row['dec'], row['i'])
-        f.write(f'\t\tInclination {inc:.3f}\n')
-        f.write(f'\t\tAscendingNode {node:.3f}\n')
-
-        f.write('\t}\n}\n')
-
-        with open(os.path.join('output', 'models', meshname), 'wb') as mf:
-            write_cmod(mf, geometry)
-
+        sp_type, sp_comment = spectrum_info
+        _write_common_details(f, row, name, sp_type, sp_comment)
         total_output += 1
+
     print(f'Output {total_output} binaries')
 
 
