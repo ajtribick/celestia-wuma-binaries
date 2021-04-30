@@ -52,7 +52,7 @@ MAP_NAMES = [
     ('44 Boo', '44 Boo B'),
 ]
 
-def download_catalog():
+def download_catalog() -> None:
     """Downloads the W UMa catalog"""
 
     if os.path.isfile(CATALOG_PATH):
@@ -66,7 +66,7 @@ def download_catalog():
             f.write(chunk)
 
 
-def map_names(tbl: Table):
+def map_names(tbl: Table) -> None:
     """Applies name fixes."""
 
     names = tbl['Name']
@@ -74,7 +74,7 @@ def map_names(tbl: Table):
         names[names == old_name] = new_name
 
 
-def download_simbad():
+def download_simbad() -> None:
     """Downloads the SIMBAD data"""
     if os.path.isfile(SIMBAD_PATH):
         print('SIMBAD result already downloaded, skipping')
@@ -216,7 +216,7 @@ def apply_celestia(celestia_dir: str) -> Table:
     return tbl
 
 
-def download_gaia(tbl: Table):
+def download_gaia(tbl: Table) -> None:
     """Downloads Gaia data for stars not in catalog."""
 
     if os.path.isfile(GAIA_PATH):
@@ -285,7 +285,7 @@ def merge_gaia(tbl: Table) -> Table:
     return vstack([tbl[tbl['gaia'].mask], merged], join_type='exact')
 
 
-def download_xref(celestia_dir: str):
+def download_xref(celestia_dir: str) -> None:
     """Downloads cross-reference data."""
 
     try:
