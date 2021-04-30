@@ -17,7 +17,6 @@
 
 """Creates the W UMa catalog."""
 
-import argparse
 import os
 import os.path
 import string
@@ -284,13 +283,9 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
     print(f'Output {total_output} binaries')
 
 
-def build_catalog() -> None:
+def build_catalog(celestia_dir: str) -> None:
     """Builds the W UMa catalog."""
-    parser = argparse.ArgumentParser(description='Build W UMa catalog.')
-    parser.add_argument('-c', '--celestia-dir', required=True, type=str)
-    args = parser.parse_args()
-
-    download_xref(args.celestia_dir)
+    download_xref(celestia_dir)
 
     try:
         os.makedirs('output/models')
@@ -300,7 +295,7 @@ def build_catalog() -> None:
     tbl = merge_data()
     with open(os.path.join('output', 'wuma.stc'), 'w') as f:
         f.write(HEADER)
-        create_stars(args.celestia_dir, f, tbl)
+        create_stars(celestia_dir, f, tbl)
 
     print("Creating archive")
     archive_name = f'wuma-{VERSION[0]}.{VERSION[1]}.{VERSION[2]}'

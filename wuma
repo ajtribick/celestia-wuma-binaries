@@ -17,6 +17,13 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
+"""Creates the W UMa catalog for Celestia."""
+
+import argparse
 from celestia_wuma.wuma import build_catalog
 
-build_catalog()
+parser = argparse.ArgumentParser(description='Build W UMa catalog.')
+parser.add_argument('-c', '--celestia-dir', required=True, type=str)
+args = parser.parse_args()
+
+build_catalog(args.celestia_dir)
