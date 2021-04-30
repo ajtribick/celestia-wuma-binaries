@@ -74,7 +74,7 @@ In order to produce an orientation with a given inclination, use the
 `convert_orientation` function in `wuma_frame.py`:
 
 ```python
-from wuma_frame import convert_orientation
+from celestia_wuma.frame import convert_orientation
 
 ra = 123.45  # in degrees
 dec = -67.8  # in degrees
