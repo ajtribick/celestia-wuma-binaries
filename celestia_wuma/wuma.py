@@ -21,7 +21,6 @@ import argparse
 import os
 import os.path
 import string
-import sys
 from typing import Dict, List, Optional, TextIO
 import zipfile
 
@@ -166,7 +165,7 @@ def apply_cel_convention(name: str) -> Optional[str]:
     return name
 
 
-def process_char(ch: str) -> str:
+def _process_char(ch: str) -> str:
     if ch in string.ascii_letters or ch in string.digits:
         return ch.lower()
     if ch == '+':
@@ -177,8 +176,9 @@ def process_char(ch: str) -> str:
         return ''
     return '_'
 
-def model_filename(name: str) -> str:
-    return ''.join(process_char(c) for c in name) + '.cmod'
+
+def _model_filename(name: str) -> str:
+    return ''.join(_process_char(c) for c in name) + '.cmod'
 
 
 def _format(n: float, p: int) -> str:
@@ -189,18 +189,20 @@ def _format(n: float, p: int) -> str:
 def _guess_spectrum(temp: float) -> str:
     # guesses spectrum from temperature, using midpoints of values in star.cpp
     if temp >= 31500:
-        return "O"
-    if temp >= 10010:
-        return "B"
-    if temp >= 7295:
-        return "A"
-    if temp >= 6070:
-        return "F"
-    if temp >= 5330:
-        return "G"
-    if temp >= 3895:
-        return "K"
-    return "M"
+        sptype = "O"
+    elif temp >= 10010:
+        sptype = "B"
+    elif temp >= 7295:
+        sptype = "A"
+    elif temp >= 6070:
+        sptype = "F"
+    elif temp >= 5330:
+        sptype = "G"
+    elif temp >= 3895:
+        sptype = "K"
+    else:
+        sptype = "M"
+    return sptype
 
 
 def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
@@ -259,25 +261,14 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
         if sp_type is not None:
             f.write(f'\tSpectralType "{sp_type}"{sp_comment}\n')
 
-        temp = row["T1"]
-        # midpoints from star.cpp
-        if temp > 10010:
-            texture = 'bstar.*'
-        elif temp > 6070:
-            texture = 'astar.*'
-        elif temp > 3895:
-            texture = 'gstar.*'
-        else:
-            texture = 'mstar.*'
-
-        f.write(f'\tTemperature {temp} # secondary = {row["T2"]} K\n')
+        f.write(f'\tTemperature {row["T1"]} # secondary = {row["T2"]} K\n')
 
         geometry = Geometry(row['q'], row['f'])
 
         f.write(f'\tRadius {row["a"] * geometry.radius * 696000:.0f}\n')
-        meshname = model_filename(name if name is not None else row['Name'])
+        meshname = _model_filename(name if name is not None else row['Name'])
         f.write(f'\tMesh "{meshname}"\n')
-        f.write(f'\tUniformRotation {{\n')
+        f.write('\tUniformRotation {\n')
         f.write(f'\t\tPeriod {row["P"]*24:.9}\n')
 
         inc, node = convert_orientation(row['ra'], row['dec'], row['i'])
@@ -295,6 +286,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
 
 
 def build_catalog() -> None:
+    """Builds the W UMa catalog."""
     parser = argparse.ArgumentParser(description='Build W UMa catalog.')
     parser.add_argument('-c', '--celestia-dir', required=True, type=str)
     args = parser.parse_args()
@@ -316,7 +308,7 @@ def build_catalog() -> None:
     with zipfile.ZipFile(
         f'{archive_name}.zip', 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9
     ) as z:
-        for root, dirs, files in os.walk('output'):
+        for root, _dirs, files in os.walk('output'):
             for file in files:
                 fs_path = os.path.join(root, file)
                 z.write(fs_path, os.path.join(archive_name, os.path.relpath(fs_path, 'output')))

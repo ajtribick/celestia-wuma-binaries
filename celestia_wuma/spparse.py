@@ -38,7 +38,7 @@ class CelMkClass(IntEnum):
     N = 0x0900
     WC = 0x0a00
     WN = 0x0b00
-    Unknown = 0x0c00
+    UNKNOWN = 0x0c00
     L = 0x0d00
     T = 0x0e00
     C = 0x0f00
@@ -55,17 +55,17 @@ CEL_UNKNOWN_SUBCLASS = 0x00a0
 
 class CelLumClass(IntEnum):
     """Celestia luminosity classes."""
-    Ia0 = 0x0000
-    Ia = 0x0001
-    Ib = 0x0002
+    IA_0 = 0x0000
+    IA = 0x0001
+    IB = 0x0002
     II = 0x0003
     III = 0x0004
     IV = 0x0005
     V = 0x0006
     VI = 0x0007
-    Unknown = 0x0008
+    UNKNOWN = 0x0008
 
-CEL_UNKNOWN_STAR = CelMkClass.Unknown + CEL_UNKNOWN_SUBCLASS + CelLumClass.Unknown
+CEL_UNKNOWN_STAR = CelMkClass.UNKNOWN + CEL_UNKNOWN_SUBCLASS + CelLumClass.UNKNOWN
 
 # pylint: disable=missing-function-docstring,multiple-statements
 
@@ -187,7 +187,7 @@ class SpecVisitor(PTNodeVisitor):
         elif str(node) == 'g':
             lclass = CelLumClass.III
         elif str(node) == 'c':
-            lclass = CelLumClass.Ib
+            lclass = CelLumClass.IB
         else:
             raise ValueError
         return lclass
@@ -229,9 +229,9 @@ class SpecVisitor(PTNodeVisitor):
         if (len(children) == 2
                 and (children[0] in ('Ia', 'IA'))
                 and children[1] == '0'):
-            lclass = CelLumClass.Ia0
+            lclass = CelLumClass.IA_0
         elif children[0] in ('Ia0', 'IA0', '0'):
-            lclass = CelLumClass.Ia0
+            lclass = CelLumClass.IA_0
         elif children[0].startswith('III'):
             lclass = CelLumClass.III
         elif children[0].startswith('II'):
@@ -241,9 +241,9 @@ class SpecVisitor(PTNodeVisitor):
         elif children[0].startswith('IX'):
             lclass = CelLumClass.VI
         elif children[0] in ('Ia', 'IA'):
-            lclass = CelLumClass.Ia
+            lclass = CelLumClass.IA
         elif children[0].startswith('I'):
-            lclass = CelLumClass.Ib
+            lclass = CelLumClass.IB
         elif children[0].startswith('VI'):  # VII, VIII as well
             lclass = CelLumClass.VI
         elif children[0].startswith('V'):
@@ -259,7 +259,7 @@ class SpecVisitor(PTNodeVisitor):
         mkclass, mksubclass = children.mktype[0]
         if len(children.lumtype) > 0:
             return mkclass, mksubclass, children.lumtype[0]
-        return mkclass, mksubclass, CelLumClass.Unknown
+        return mkclass, mksubclass, CelLumClass.UNKNOWN
 
     def visit_normalstar(self, node, children):
         mkclass, mksubclass, lclass = children.noprefixstar[0]
@@ -323,7 +323,7 @@ class SpecVisitor(PTNodeVisitor):
         elif len(children.lumtype) > 0:
             lclass = children.lumtype[0]
         else:
-            lclass = CelLumClass.Unknown
+            lclass = CelLumClass.UNKNOWN
 
         if scsubclass is None:
             scsubclass = CEL_UNKNOWN_SUBCLASS
@@ -411,40 +411,53 @@ def parse_spectrum(sptype: str) -> int:
 
     return sum(visit_parse_tree(parse_tree, VISITOR))
 
+
+def _unparse_mk(code: int) -> str:
+    try:
+        mk = CelMkClass(code & 0xff00)
+    except ValueError:
+        mk = CelMkClass.UNKNOWN
+
+    if mk == CelMkClass.UNKNOWN:
+        sp = '?'
+    else:
+        sp = mk.name
+
+        sc = code & 0x00f0
+        if sc < CEL_UNKNOWN_SUBCLASS:
+            sp += str(sc >> 4)
+
+        # white dwarfs don't have luminosity classes
+        if mk < CelMkClass.DA:
+            try:
+                lum = CelLumClass(code & 0x000f)
+            except ValueError:
+                lum = CelLumClass.UNKNOWN
+        else:
+            lum = CelLumClass.UNKNOWN
+
+        if lum == CelLumClass.IA_0:
+            sp += 'Ia0'
+        elif lum == CelLumClass.IA:
+            sp += 'Ia'
+        elif lum == CelLumClass.IB:
+            sp += 'Ib'
+        elif lum != CelLumClass.UNKNOWN:
+            sp += lum.name
+
+    return sp
+
+
 def unparse_spectrum(code: int) -> str:
     """Turns a Celestia spectral type into a string."""
     category = code & 0xf000
 
     # quick check for neutron stars and black holes
     if category == 0x2000:
-        return 'Q'
-    if category == 0x3000:
-        return 'X'
-
-    try:
-        mk = CelMkClass(code & 0xff00)
-    except ValueError:
-        return '?'
-
-    if mk == CelMkClass.Unknown:
-        return '?'
-
-    sp = mk.name
-
-    sc = code & 0x00f0
-    if sc < CEL_UNKNOWN_SUBCLASS:
-        sp += str(sc >> 4)
-
-    # white dwarfs don't have luminosity classes
-    if mk >= CelMkClass.DA:
-        return sp
-
-    try:
-        lum = CelLumClass(code & 0x000f)
-    except ValueError:
-        return sp
-
-    if lum != CelLumClass.Unknown:
-        sp += lum.name
+        sp = 'Q'
+    elif category == 0x3000:
+        sp = 'X'
+    else:
+        sp = _unparse_mk(code)
 
     return sp

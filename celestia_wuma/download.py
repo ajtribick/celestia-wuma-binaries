@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # celestia-wuma-binaries: W Ursae Majoris binaries for Celestia
 # Copyright (C) 2019–2020  Andrew Tribick
 #
@@ -171,7 +169,7 @@ def apply_celestia(celestia_dir: str) -> Table:
             if not cel_exists[idx]:
                 cel_exists[idx] = True
                 cel_ids[idx] = hip
-                if (sp_type & 0xff00) == CelMkClass.Unknown:
+                if (sp_type & 0xff00) == CelMkClass.UNKNOWN:
                     needs_spectrum[idx] = True
 
     tbl.add_columns([
@@ -277,7 +275,3 @@ def download_xref(celestia_dir: str):
     download_gaia(tbl)
     tbl = merge_gaia(tbl)
     tbl.write(XREF_PATH, format='ascii.ecsv')
-
-
-if __name__ == '__main__':
-    download_xref()
