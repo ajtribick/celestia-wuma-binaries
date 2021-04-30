@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # celestia-wuma-binaries: W Ursae Majoris binaries for Celestia
 # Copyright (C) 2019–2020  Andrew Tribick
 #
@@ -19,11 +17,13 @@
 
 """Creates the W UMa catalog."""
 
+import argparse
 import os
 import os.path
 import string
 import sys
 from typing import Dict, List, Optional, TextIO
+import zipfile
 
 import astropy.io.ascii as io_ascii
 from astropy.table import Table, join
@@ -31,10 +31,10 @@ from astropy import units
 
 import numpy as np
 
-from spparse import parse_spectrum, unparse_spectrum
-from wuma_download import CATALOG_PATH, XREF_PATH, download_xref, map_names
-from wuma_frame import convert_orientation
-from wuma_model import CmodWriter, Geometry
+from .spparse import parse_spectrum, unparse_spectrum
+from .download import CATALOG_PATH, XREF_PATH, download_xref, map_names
+from .frame import convert_orientation
+from .model import CmodWriter, Geometry
 
 
 VERSION = 1, 0, 1
@@ -294,10 +294,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
     print(f'Output {total_output} binaries')
 
 
-if __name__ == '__main__':
-    import argparse
-    import zipfile
-
+def build_catalog() -> None:
     parser = argparse.ArgumentParser(description='Build W UMa catalog.')
     parser.add_argument('-c', '--celestia-dir', required=True, type=str)
     args = parser.parse_args()

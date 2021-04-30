@@ -36,8 +36,8 @@ import requests
 
 from scipy.linalg import norm
 
-from spparse import CelMkClass
-from wuma_frame import EQUATORIAL_TRANSFORM
+from .spparse import CelMkClass
+from .frame import EQUATORIAL_TRANSFORM
 
 CATALOG_URL = 'https://wumacat.aob.rs/Downloads/Catalog'
 SIMBAD_TAP_URL = 'http://simbad.u-strasbg.fr:80/simbad/sim-tap'

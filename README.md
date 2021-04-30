@@ -45,7 +45,7 @@ the files in case of updates to Celestia.
 6. Run the script, supplying the path to the Celestia directory (this is used
    for star names and positions).
 
-   `python wuma.py -c (path to Celestia)`
+   `python wuma -c (path to Celestia)`
 
 7. The output is generated in the archive `wuma.zip`.
 
