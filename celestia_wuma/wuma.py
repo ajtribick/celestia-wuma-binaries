@@ -17,6 +17,7 @@
 
 """Creates the W UMa catalog."""
 
+from datetime import date
 import os
 import os.path
 import string
@@ -204,7 +205,7 @@ def _guess_spectrum(temp: float) -> str:
     return sptype
 
 
-def _write_header(
+def _write_star_header(
     f: TextIO, row: Row, name: Optional[str], cel_names: Dict[int, List[str]]
 ) -> Optional[Tuple[Optional[str], str]]:
     # Use the spectral types with the following preference:
@@ -289,7 +290,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table) -> None:
         )
         name = apply_cel_convention(row['Name'])
 
-        spectrum_info = _write_header(f, row, name, cel_names)
+        spectrum_info = _write_star_header(f, row, name, cel_names)
         if spectrum_info is None:
             continue
 
@@ -312,6 +313,7 @@ def build_catalog(celestia_dir: str) -> None:
     tbl = merge_data()
     with open(os.path.join('output', 'wuma.stc'), 'w') as f:
         f.write(HEADER)
+        f.write(f'\n# Generated on {date.today().isoformat()}\n')
         create_stars(celestia_dir, f, tbl)
 
     print("Creating archive")
