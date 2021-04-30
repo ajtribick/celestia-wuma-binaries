@@ -33,7 +33,7 @@ import numpy as np
 from .spparse import parse_spectrum, unparse_spectrum
 from .download import CATALOG_PATH, XREF_PATH, download_xref, map_names
 from .frame import convert_orientation
-from .model import CmodWriter, Geometry
+from .model import make_geometry, write_cmod
 
 
 VERSION = 1, 0, 1
@@ -263,7 +263,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
 
         f.write(f'\tTemperature {row["T1"]} # secondary = {row["T2"]} K\n')
 
-        geometry = Geometry(row['q'], row['f'])
+        geometry = make_geometry(row['q'], row['f'])
 
         f.write(f'\tRadius {row["a"] * geometry.radius * 696000:.0f}\n')
         meshname = _model_filename(name if name is not None else row['Name'])
@@ -278,8 +278,7 @@ def create_stars(celestia_dir: str, f: TextIO, tbl: Table):
         f.write('\t}\n}\n')
 
         with open(os.path.join('output', 'models', meshname), 'wb') as mf:
-            writer = CmodWriter(mf)
-            writer.write(geometry)
+            write_cmod(mf, geometry)
 
         total_output += 1
     print(f'Output {total_output} binaries')

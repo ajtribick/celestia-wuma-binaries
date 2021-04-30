@@ -145,7 +145,7 @@ def _check_header(f: BinaryIO) -> int:
     return db_len
 
 
-STAR_FORMAT = struct.Struct('<I3fhH')
+_STAR_FORMAT = struct.Struct('<I3fhH')
 
 
 def _process_star(
@@ -155,7 +155,7 @@ def _process_star(
     star = f.read(20)
     if len(star) != 20:
         raise EOFError("Unexpected end-of-file")
-    hip, x, y, z, _v_mag, sp_type = STAR_FORMAT.unpack(star)
+    hip, x, y, z, _v_mag, sp_type = _STAR_FORMAT.unpack(star)
     try:
         idx = id_idx[hip]
     except KeyError:

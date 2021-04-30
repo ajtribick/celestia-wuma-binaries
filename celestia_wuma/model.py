@@ -17,6 +17,7 @@
 
 """Writes out the cmod file."""
 
+from dataclasses import dataclass
 from enum import Enum
 import struct
 from typing import BinaryIO, List, Tuple
@@ -31,7 +32,7 @@ CEL_MODEL_HEADER_BINARY = b"#celmodel_binary"
 
 
 # from modelfile.h
-class ModelFileToken(Enum):
+class _ModelFileToken(Enum):
     MATERIAL = 1001
     END_MATERIAL = 1002
     DIFFUSE = 1003
@@ -49,7 +50,7 @@ class ModelFileToken(Enum):
 
 
 # from modelfile.h
-class ModelFileType(Enum):
+class _ModelFileType(Enum):
     FLOAT1 = 1
     FLOAT2 = 2
     FLOAT3 = 3
@@ -60,7 +61,7 @@ class ModelFileType(Enum):
 
 
 # from mesh.h
-class VertexAttributeSemantic(Enum):
+class _VertexAttributeSemantic(Enum):
     POSITION = 0
     COLOR0 = 1
     COLOR1 = 2
@@ -76,7 +77,7 @@ class VertexAttributeSemantic(Enum):
 
 
 # from mesh.h
-class VertexAttributeFormat(Enum):
+class _VertexAttributeFormat(Enum):
     FLOAT1 = 0
     FLOAT2 = 1
     FLOAT3 = 2
@@ -85,7 +86,7 @@ class VertexAttributeFormat(Enum):
 
 
 # from mesh.h
-class PrimitiveGroupType(Enum):
+class _PrimitiveGroupType(Enum):
     TRI_LIST = 0
     TRI_STRIP = 1
     TRI_FAN = 2
@@ -95,14 +96,14 @@ class PrimitiveGroupType(Enum):
     SPRITE_LIST = 6
 
 
-S_INT16 = struct.Struct('<h')
-S_UINT32 = struct.Struct('<I')
-S_COLOR = struct.Struct('<h3f')
-S_FLOAT1 = struct.Struct('<hf')
-S_TEXTURE = struct.Struct('<4h')
-S_VERTEX_DESC = struct.Struct('<2h')
-S_VERTEX = struct.Struct('<8f')
-S_GROUP = struct.Struct('<h2I')
+_S_INT16 = struct.Struct('<h')
+_S_UINT32 = struct.Struct('<I')
+_S_COLOR = struct.Struct('<h3f')
+_S_FLOAT1 = struct.Struct('<hf')
+_S_TEXTURE = struct.Struct('<4h')
+_S_VERTEX_DESC = struct.Struct('<2h')
+_S_VERTEX = struct.Struct('<8f')
+_S_GROUP = struct.Struct('<h2I')
 
 
 # Pre-compute cos(theta), sin(theta). Due to symmetry we only need to compute one quadrant in yz.
@@ -206,35 +207,28 @@ def _surface(phi: float, x: float, theta_i: int, outer: float, q: float) -> floa
     return brentq(lambda r: roche([x, r*ct, r*st], q)-phi, inner, outer)
 
 
+@dataclass
 class Vertex:
-    """Mesh vertex."""
-    def __init__(self, position: np.ndarray, normal: np.ndarray, uv: np.ndarray):
-        self.position = position
-        self.normal = normal
-        self.uv = uv
-
-    def __repr__(self):
-        return f'Vertex({self.position!r}, {self.normal!r}, {self.uv!r})'
+    """Vertex attributes."""
+    position: np.ndarray
+    normal: np.ndarray
+    uv: np.ndarray
 
 
-class MeshGroup:
-    """Mesh group."""
-    def __init__(self, primitive: PrimitiveGroupType, material: int, indices: List[int]):
-        self.primitive = primitive
-        self.material = material
-        self.indices = indices
+@dataclass
+class _MeshGroup:
+    primitive: _PrimitiveGroupType
+    material: int
+    indices: List[int]
+
 
 # pre-build groups
-def _build_groups() -> List[MeshGroup]:
+def _build_groups() -> List[_MeshGroup]:
     ring_size = 4*THETA_SAMPLES - 3
     num_vertices = 2 + ring_size*X_SAMPLES
 
     # x_min cap
-    groups = [MeshGroup(
-        PrimitiveGroupType.TRI_FAN,
-        0,
-        list(range(ring_size+1)))
-    ]
+    groups = [_MeshGroup(_PrimitiveGroupType.TRI_FAN, 0, list(range(ring_size+1)))]
 
     # triangle strip goes ring 1 point 1, ring 2 point 1, ring 1 point 2, ring 2 point 2, etc.
     offsets = np.empty(ring_size*2, dtype=np.uint32)
@@ -243,15 +237,15 @@ def _build_groups() -> List[MeshGroup]:
     offsets += 1
 
     for x in range(X_SAMPLES-1):
-        groups.append(MeshGroup(
-            PrimitiveGroupType.TRI_STRIP,
+        groups.append(_MeshGroup(
+            _PrimitiveGroupType.TRI_STRIP,
             0,
             list(offsets + x*ring_size)
         ))
 
     # x_max cap: note that the list needs to be reversed
-    groups.append(MeshGroup(
-        PrimitiveGroupType.TRI_FAN,
+    groups.append(_MeshGroup(
+        _PrimitiveGroupType.TRI_FAN,
         0,
         [num_vertices-1]+list(range(num_vertices-2, num_vertices-ring_size-2, -1))
     ))
@@ -259,202 +253,223 @@ def _build_groups() -> List[MeshGroup]:
     return groups
 
 
-MESH_GROUPS = _build_groups()
+_MESH_GROUPS = _build_groups()
 
 
+@dataclass
 class Geometry:
     """Geometry of the Roche lobe."""
+    vertices: List[Vertex]
+    radius: float
 
-    def __init__(self, q: float, f: float):
-        if f <= 0.0001:
-            f = 0.0001
-        vertices, radius = Geometry._compute_vertices(q, f)
-        self.vertices = vertices
-        self.radius = radius
 
-    @staticmethod
-    def _fix_auto_center(vertices: List[Vertex], q: float, x_min: float, x_max: float) -> float:
-        # point to fix auto-centre in Celestia
-        com = q/(q+1)
-        com_min = com - x_min
-        com_max = x_max - com
-        if com_min > com_max:
-            vertices.append(Vertex(
-                np.array([com+com_min, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
-            ))
-            return com_min
-        else:
-            vertices.append(Vertex(
-                np.array([com-com_max, 0, 0]), np.array([-1, 0, 0]), np.array([0.5, 0])
-            ))
-            return com_max
-
-    @staticmethod
-    def _compute_bounds(q: float, f: float):
-        l1, l2, l3 = lagrange_points(q)
-        # get dimensionless potential of common envelope
-        phi1 = roche([l1, 0, 0], q)
-        phi2 = roche([l2, 0, 0], q)
-        phi = f*(phi2-phi1) + phi1
-
-        # use sphere touching L2 and L3 as initial guess for outer boundary
-        bound_cx = (l2+l3) / 2
-        bound_r = (l2-l3) / 2
-
-        # model in cylindrical coordinates along x-axis: get min and max extents
-        x_min = _extent_min(phi, l3, q)
-        x_max = _extent_max(phi, l2, q)
-
-        # distribute points as if the envelope were two spheres touching at L1
-        r1 = l1 - x_min
-        r2 = x_max - l1
-        minor_points = int((X_SAMPLES-1) * (2+r2/r1)/6)
-        major_points = X_SAMPLES - 1 - minor_points
-        x_values = np.empty(X_SAMPLES)
-        # samples for primary
-        x_values[:major_points] = (
-            (1-np.cos(np.linspace(0, np.pi, major_points+1, endpoint=False)[1:]))*r1/2 + x_min
-        )
-        # sample neck
-        x_values[major_points] = l1
-        # samples for secondary
-        x_values[major_points+1:] = (
-            (1-np.cos(np.linspace(0, np.pi, minor_points+1, endpoint=False)[1:]))*r2/2 + l1
-        )
-
-        return x_min, x_max, x_values, phi
-
-    @staticmethod
-    def _compute_vertices(q: float, f: float) -> List[Vertex]:
-        x_min, x_max, x_values, phi = Geometry._compute_bounds(q, f)
-
-        # boundary for intermediate point approximation
-        bound_cx = (x_min+x_max) / 2
-        bound_r = (x_max-x_min) / 2
-
-        # x_min endpoint
-        vertices = [Vertex(
-            np.array([x_min, 0, 0]), np.array([-1, 0, 0]), np.array([0.5, 0])
-        )]
-
-        quad_positions = np.empty((THETA_SAMPLES, 3))
-        quad_normals = np.empty((THETA_SAMPLES, 3))
-
-        # solve for intermediate points
-        for x in x_values:
-            v = (x-x_min)/(x_max-x_min)
-            outer = np.sqrt(bound_r*bound_r - (x - bound_cx)**2)
-            # compute first quadrant, saving data to mirror for other quadrants
-            for theta_i in range(THETA_SAMPLES):
-                rho = _surface(phi, x, theta_i, outer, q)
-                position = np.array([x, rho*COS_VALS[theta_i], rho*SIN_VALS[theta_i]])
-                normal = approx_fprime(position, roche, 1e-6, q)
-                # force alignment of normal components at 0 and 90 degrees
-                if theta_i == 0:
-                    normal[2] = 0
-                elif theta_i == THETA_SAMPLES-1:
-                    normal[1] = 0
-                # dimensionless potential increases towards the surface, so reverse for normal
-                normal = -normal / norm(normal)
-                quad_positions[theta_i] = position
-                quad_normals[theta_i] = normal
-                vertices.append(Vertex(position, normal, np.array([U_VALS[theta_i], v])))
-            # second quadrant
-            for theta_i in range(THETA_SAMPLES-2, 0, -1):
-                vertices.append(Vertex(
-                    np.multiply(quad_positions[theta_i], [1, -1, 1]),
-                    np.multiply(quad_normals[theta_i], [1, -1, 1]),
-                    np.array([0.5-U_VALS[theta_i], v])
-                ))
-            # third quadrant
-            for theta_i in range(THETA_SAMPLES):
-                vertices.append(Vertex(
-                    np.multiply(quad_positions[theta_i], [1, -1, -1]),
-                    np.multiply(quad_normals[theta_i], [1, -1, -1]),
-                    np.array([0.5+U_VALS[theta_i], v])
-                ))
-            # fourth quadrant
-            for theta_i in range(THETA_SAMPLES-2, -1, -1):
-                vertices.append(Vertex(
-                    np.multiply(quad_positions[theta_i], [1, 1, -1]),
-                    np.multiply(quad_normals[theta_i], [1, 1, -1]),
-                    np.array([1-U_VALS[theta_i], v])
-                ))
-
-        # x_max endpoint
+def _fix_auto_center(vertices: List[Vertex], q: float, x_min: float, x_max: float) -> float:
+    # point to fix auto-centre in Celestia
+    com = q/(q+1)
+    com_min = com - x_min
+    com_max = x_max - com
+    if com_min > com_max:
         vertices.append(Vertex(
-            np.array([x_max, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
+            np.array([com+com_min, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
         ))
-
-        radius = Geometry._fix_auto_center(vertices, q, x_min, x_max)
-
-        return vertices, radius
-
-
-# based on modelfile.cpp
-class CmodWriter:
-    """Routines for writing the CMOD file."""
-
-    def __init__(self, f: BinaryIO):
-        self.f = f
-
-    def _write_token(self, t: ModelFileToken):
-        self.f.write(S_INT16.pack(t.value))
-
-    def _write_color(self, r: float, g: float, b: float):
-        self.f.write(S_COLOR.pack(ModelFileType.COLOR.value, r, g, b))
-
-    def _write_float1(self, value: float):
-        self.f.write(S_FLOAT1.pack(ModelFileType.FLOAT1.value, value))
-
-    def _write_material(self):
-        self._write_token(ModelFileToken.MATERIAL)
-        self._write_token(ModelFileToken.DIFFUSE)
-        self._write_color(0, 0, 0)
-        self._write_token(ModelFileToken.EMISSIVE)
-        self._write_color(1, 1, 1)
-        self._write_token(ModelFileToken.OPACITY)
-        self._write_float1(1)
-        self._write_token(ModelFileToken.END_MATERIAL)
-
-    def _write_vertex_desc(
-        self, semantic: VertexAttributeSemantic, format: VertexAttributeFormat
-    ):
-        self.f.write(S_VERTEX_DESC.pack(semantic.value, format.value))
-
-    def _write_vertex(self, vertex: Vertex):
-        # note the Geometry class uses +z as the rotation, Celestia uses +y
-        self.f.write(S_VERTEX.pack(
-            vertex.position[0], vertex.position[2], vertex.position[1],
-            vertex.normal[0], vertex.normal[2], vertex.normal[1],
-            vertex.uv[0], vertex.uv[1]
+        radius = com_min
+    else:
+        vertices.append(Vertex(
+            np.array([com-com_max, 0, 0]), np.array([-1, 0, 0]), np.array([0.5, 0])
         ))
+        radius = com_max
 
-    def _write_group(self, group: MeshGroup):
-        self.f.write(S_GROUP.pack(group.primitive.value, group.material, len(group.indices)))
-        for index in group.indices:
-            self.f.write(S_UINT32.pack(index))
+    return radius
 
-    def _write_mesh(self, geometry: Geometry):
-        self._write_token(ModelFileToken.MESH)
 
-        self._write_token(ModelFileToken.VERTEX_DESC)
-        self._write_vertex_desc(VertexAttributeSemantic.POSITION, VertexAttributeFormat.FLOAT3)
-        self._write_vertex_desc(VertexAttributeSemantic.NORMAL, VertexAttributeFormat.FLOAT3)
-        self._write_vertex_desc(VertexAttributeSemantic.TEXTURE0, VertexAttributeFormat.FLOAT2)
-        self._write_token(ModelFileToken.END_VERTEX_DESC)
+@dataclass
+class _GeometryBounds:
+    x_min: float
+    x_max: float
+    x_values: np.ndarray
+    phi: float
+    cx: float
+    r: float
 
-        self._write_token(ModelFileToken.VERTICES)
-        self.f.write(S_UINT32.pack(len(geometry.vertices)))
-        for vertex in geometry.vertices:
-            self._write_vertex(vertex)
-        for group in MESH_GROUPS:
-            self._write_group(group)
 
-        self._write_token(ModelFileToken.END_MESH)
+def _compute_x_values(x_min: float, x_max: float, l1: float) -> np.ndarray:
+    # distribute points as if the envelope were two spheres touching at L1
+    r1 = l1 - x_min
+    r2 = x_max - l1
+    minor_points = int((X_SAMPLES-1) * (2+r2/r1)/6)
+    major_points = X_SAMPLES - 1 - minor_points
+    x_values = np.empty(X_SAMPLES)
+    # samples for primary
+    x_values[:major_points] = (
+        (1-np.cos(np.linspace(0, np.pi, major_points+1, endpoint=False)[1:]))*r1/2 + x_min
+    )
+    # sample neck
+    x_values[major_points] = l1
+    # samples for secondary
+    x_values[major_points+1:] = (
+        (1-np.cos(np.linspace(0, np.pi, minor_points+1, endpoint=False)[1:]))*r2/2 + l1
+    )
 
-    def write(self, geometry: Geometry):
-        """Write the given model geometry to the file."""
-        self.f.write(CEL_MODEL_HEADER_BINARY)
-        self._write_material()
-        self._write_mesh(geometry)
+    return x_values
+
+
+def _compute_bounds(q: float, f: float) -> _GeometryBounds:
+    l1, l2, l3 = lagrange_points(q)
+    # get dimensionless potential of common envelope
+    phi1 = roche([l1, 0, 0], q)
+    phi2 = roche([l2, 0, 0], q)
+    phi = f*(phi2-phi1) + phi1
+
+    # model in cylindrical coordinates along x-axis: get min and max extents
+    x_min = _extent_min(phi, l3, q)
+    x_max = _extent_max(phi, l2, q)
+
+    x_values = _compute_x_values(x_min, x_max, l1)
+
+    # boundary for intermediate point approximation
+    cx = (x_min+x_max) / 2
+    r = (x_max-x_min) / 2
+
+    return _GeometryBounds(x_min, x_max, x_values, phi, cx, r)
+
+
+def make_geometry(q: float, f: float) -> Geometry:
+    """Creates the geometry for a W UMa binary."""
+
+    bounds = _compute_bounds(q, max(f, 0.0001))
+
+    # x_min endpoint
+    vertices = [
+        Vertex(np.array([bounds.x_min, 0, 0]), np.array([-1, 0, 0]), np.array([0.5, 0])),
+    ]
+
+    quad_positions = np.empty((THETA_SAMPLES, 3))
+    quad_normals = np.empty((THETA_SAMPLES, 3))
+
+    # solve for intermediate points
+    for x in bounds.x_values:
+        v = (x-bounds.x_min)/(bounds.x_max-bounds.x_min)
+        outer = np.sqrt(bounds.r*bounds.r - (x - bounds.cx)**2)
+        # compute first quadrant, saving data to mirror for other quadrants
+        for theta_i in range(THETA_SAMPLES):
+            rho = _surface(bounds.phi, x, theta_i, outer, q)
+            position = np.array([x, rho*COS_VALS[theta_i], rho*SIN_VALS[theta_i]])
+            normal = approx_fprime(position, roche, 1e-6, q)
+            # force alignment of normal components at 0 and 90 degrees
+            if theta_i == 0:
+                normal[2] = 0
+            elif theta_i == THETA_SAMPLES-1:
+                normal[1] = 0
+            # dimensionless potential increases towards the surface, so reverse for normal
+            normal /= -norm(normal)
+            quad_positions[theta_i] = position
+            quad_normals[theta_i] = normal
+            vertices.append(Vertex(
+                position,
+                normal,
+                np.array([U_VALS[theta_i], v])
+            ))
+        # second quadrant
+        for theta_i in range(THETA_SAMPLES-2, 0, -1):
+            vertices.append(Vertex(
+                np.multiply(quad_positions[theta_i], [1, -1, 1]),
+                np.multiply(quad_normals[theta_i], [1, -1, 1]),
+                np.array([0.5-U_VALS[theta_i], v])
+            ))
+        # third quadrant
+        for theta_i in range(THETA_SAMPLES):
+            vertices.append(Vertex(
+                np.multiply(quad_positions[theta_i], [1, -1, -1]),
+                np.multiply(quad_normals[theta_i], [1, -1, -1]),
+                np.array([0.5+U_VALS[theta_i], v])
+            ))
+        # fourth quadrant
+        for theta_i in range(THETA_SAMPLES-2, -1, -1):
+            vertices.append(Vertex(
+                np.multiply(quad_positions[theta_i], [1, 1, -1]),
+                np.multiply(quad_normals[theta_i], [1, 1, -1]),
+                np.array([1-U_VALS[theta_i], v])
+            ))
+
+    # x_max endpoint
+    vertices.append(Vertex(
+        np.array([bounds.x_max, 0, 0]), np.array([1, 0, 0]), np.array([0.5, 1])
+    ))
+
+    radius = _fix_auto_center(vertices, q, bounds.x_min, bounds.x_max)
+
+    return Geometry(vertices, radius)
+
+
+# CMOD writing utilities, based on modelfile.cpp
+
+def _write_token(f: BinaryIO, t: _ModelFileToken) -> None:
+    f.write(_S_INT16.pack(t.value))
+
+
+def _write_color(f: BinaryIO, r: float, g: float, b: float) -> None:
+    f.write(_S_COLOR.pack(_ModelFileType.COLOR.value, r, g, b))
+
+
+def _write_float1(f: BinaryIO, value: float) -> None:
+    f.write(_S_FLOAT1.pack(_ModelFileType.FLOAT1.value, value))
+
+
+def _write_material(f: BinaryIO) -> None:
+    _write_token(f, _ModelFileToken.MATERIAL)
+    _write_token(f, _ModelFileToken.DIFFUSE)
+    _write_color(f, 0, 0, 0)
+    _write_token(f, _ModelFileToken.EMISSIVE)
+    _write_color(f, 1, 1, 1)
+    _write_token(f, _ModelFileToken.OPACITY)
+    _write_float1(f, 1)
+    _write_token(f,_ModelFileToken.END_MATERIAL)
+
+
+def _write_vertex_desc(
+    f: BinaryIO,
+    semantic: _VertexAttributeSemantic,
+    fmt: _VertexAttributeFormat,
+) -> None:
+    f.write(_S_VERTEX_DESC.pack(semantic.value, fmt.value))
+
+
+def _write_vertex(f: BinaryIO, vertex: Vertex) -> None:
+    # note the Geometry class uses +z as the rotation, Celestia uses +y
+    f.write(_S_VERTEX.pack(
+        vertex.position[0], vertex.position[2], vertex.position[1],
+        vertex.normal[0], vertex.normal[2], vertex.normal[1],
+        vertex.uv[0], vertex.uv[1]
+    ))
+
+
+def _write_group(f: BinaryIO, group: _MeshGroup) -> None:
+    f.write(_S_GROUP.pack(group.primitive.value, group.material, len(group.indices)))
+    for index in group.indices:
+        f.write(_S_UINT32.pack(index))
+
+
+def _write_mesh(f: BinaryIO, geometry: Geometry) -> None:
+    _write_token(f, _ModelFileToken.MESH)
+
+    _write_token(f, _ModelFileToken.VERTEX_DESC)
+    _write_vertex_desc(f, _VertexAttributeSemantic.POSITION, _VertexAttributeFormat.FLOAT3)
+    _write_vertex_desc(f, _VertexAttributeSemantic.NORMAL, _VertexAttributeFormat.FLOAT3)
+    _write_vertex_desc(f, _VertexAttributeSemantic.TEXTURE0, _VertexAttributeFormat.FLOAT2)
+    _write_token(f, _ModelFileToken.END_VERTEX_DESC)
+
+    _write_token(f, _ModelFileToken.VERTICES)
+    f.write(_S_UINT32.pack(len(geometry.vertices)))
+    for vertex in geometry.vertices:
+        _write_vertex(f, vertex)
+    for group in _MESH_GROUPS:
+        _write_group(f, group)
+
+    _write_token(f, _ModelFileToken.END_MESH)
+
+
+def write_cmod(f: BinaryIO, geometry: Geometry) -> None:
+    """Write the given model geometry to the file."""
+    f.write(CEL_MODEL_HEADER_BINARY)
+    _write_material(f)
+    _write_mesh(f, geometry)
