@@ -23,22 +23,17 @@ import os.path
 import struct
 from typing import BinaryIO, Mapping, Optional, Tuple
 
-from astropy.io import votable
 import astropy.io.ascii as io_ascii
-from astropy.table import Column, MaskedColumn, Table, join, vstack
-
-from astroquery.gaia import Gaia
-
 import numpy as np
-
-from pyvo.dal import AsyncTAPJob
-
 import requests
-
+from astropy.io import votable
+from astropy.table import Column, MaskedColumn, Table, join, vstack
+from astroquery.gaia import Gaia
+from pyvo.dal import AsyncTAPJob
 from scipy.linalg import norm
 
-from .spparse import CelMkClass
 from .frame import EQUATORIAL_TRANSFORM
+from .spparse import CelMkClass
 
 CATALOG_URL = 'https://wumacat.aob.rs/Downloads/Catalog'
 SIMBAD_TAP_URL = 'http://simbad.u-strasbg.fr:80/simbad/sim-tap'

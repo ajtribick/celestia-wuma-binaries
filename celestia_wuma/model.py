@@ -17,14 +17,13 @@
 
 """Writes out the cmod file."""
 
+import struct
 from dataclasses import dataclass
 from enum import Enum
-import struct
 from typing import BinaryIO, List, Tuple
 
 import numpy as np
 from numpy.typing import ArrayLike
-
 from scipy.linalg import norm
 from scipy.optimize import approx_fprime, brentq, newton
 

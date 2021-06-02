@@ -17,24 +17,22 @@
 
 """Creates the W UMa catalog."""
 
-from datetime import date
 import os
 import os.path
 import string
-from typing import Dict, List, Optional, TextIO, Tuple
 import zipfile
+from datetime import date
+from typing import Dict, List, Optional, TextIO, Tuple
 
 import astropy.io.ascii as io_ascii
+import numpy as np
 from astropy.table import Row, Table, join
 from astropy import units
 
-import numpy as np
-
-from .spparse import parse_spectrum, unparse_spectrum
 from .download import CATALOG_PATH, XREF_PATH, download_xref, map_names
 from .frame import convert_orientation
 from .model import make_geometry, write_cmod
-
+from .spparse import parse_spectrum, unparse_spectrum
 
 VERSION = 1, 0, 2
 
