@@ -17,12 +17,14 @@
 
 """Creates the W UMa catalog."""
 
+from __future__ import annotations
+
 import os
 import os.path
 import string
 import zipfile
 from datetime import date
-from typing import Dict, List, Optional, TextIO, Tuple
+from typing import Optional, TextIO
 
 import astropy.io.ascii as io_ascii
 import numpy as np
@@ -125,7 +127,7 @@ def merge_data() -> Table:
     return tbl
 
 
-def find_existing_names(celestia_dir: str, tbl: Table) -> Dict[int, List[str]]:
+def find_existing_names(celestia_dir: str, tbl: Table) -> dict[int, list[str]]:
     """Loads existing names for stars from starnames.dat."""
     wuma_ids = set(tbl[np.logical_not(tbl['hip'].mask)]['hip'])
     names = {}
@@ -204,8 +206,8 @@ def _guess_spectrum(temp: float) -> str:
 
 
 def _write_star_header(
-    f: TextIO, row: Row, name: Optional[str], cel_names: Dict[int, List[str]]
-) -> Optional[Tuple[Optional[str], str]]:
+    f: TextIO, row: Row, name: Optional[str], cel_names: dict[int, list[str]]
+) -> Optional[tuple[Optional[str], str]]:
     # Use the spectral types with the following preference:
     # 1. SIMBAD
     # 2. The value in stars.dat, unless unknown - no override necessary here

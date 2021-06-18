@@ -17,10 +17,12 @@
 
 """Writes out the cmod file."""
 
+from __future__ import annotations
+
 import struct
 from dataclasses import dataclass
 from enum import Enum
-from typing import BinaryIO, List, Tuple
+from typing import BinaryIO
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -106,7 +108,7 @@ _S_GROUP = struct.Struct('<h2I')
 
 
 # Pre-compute cos(theta), sin(theta). Due to symmetry we only need to compute one quadrant in yz.
-def _init_angular(samples: int) -> Tuple[np.ndarray, np.ndarray]:
+def _init_angular(samples: int) -> tuple[np.ndarray, np.ndarray]:
     thetas = np.linspace(0.0, np.pi/2, samples)
     cos_vals = np.cos(thetas)
     sin_vals = np.sin(thetas)
@@ -158,7 +160,7 @@ def _l3prime(x: float, q: float) -> float:
     return 2*q/((1+q)*(1-x)**3) - 2/((1+q)*x**3) + 1
 
 
-def lagrange_points(q: float) -> Tuple[float, float, float]:
+def lagrange_points(q: float) -> tuple[float, float, float]:
     """Computes the locations of the colinear Lagrange points."""
     # use Newton to avoid singularities at interval endpoints
     l1 = newton(_l1, 0.5, fprime=_l1prime, args=(q,))
@@ -218,11 +220,11 @@ class Vertex:
 class _MeshGroup:
     primitive: _PrimitiveGroupType
     material: int
-    indices: List[int]
+    indices: list[int]
 
 
 # pre-build groups
-def _build_groups() -> List[_MeshGroup]:
+def _build_groups() -> list[_MeshGroup]:
     ring_size = 4*THETA_SAMPLES - 3
     num_vertices = 2 + ring_size*X_SAMPLES
 
@@ -258,11 +260,11 @@ _MESH_GROUPS = _build_groups()
 @dataclass
 class Geometry:
     """Geometry of the Roche lobe."""
-    vertices: List[Vertex]
+    vertices: list[Vertex]
     radius: float
 
 
-def _fix_auto_center(vertices: List[Vertex], q: float, x_min: float, x_max: float) -> float:
+def _fix_auto_center(vertices: list[Vertex], q: float, x_min: float, x_max: float) -> float:
     # point to fix auto-centre in Celestia
     com = q/(q+1)
     com_min = com - x_min

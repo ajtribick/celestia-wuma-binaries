@@ -17,11 +17,13 @@
 
 """Downloads the data files for the W UMa catalog."""
 
+from __future__ import annotations
+
 import gzip
 import os
 import os.path
 import struct
-from typing import BinaryIO, Mapping, Optional, Tuple
+from typing import BinaryIO, Optional
 
 import astropy.io.ascii as io_ascii
 import numpy as np
@@ -100,7 +102,7 @@ def download_simbad() -> None:
     job.delete()
 
 
-def _map_ids(tbl: Table) -> Mapping[int, int]:
+def _map_ids(tbl: Table) -> dict[int, int]:
     gaia_ids = np.zeros(len(tbl), dtype=np.int64)
     cel_ids = np.zeros(len(tbl), dtype=np.uint32)
     id_idx = {}
@@ -145,8 +147,8 @@ _STAR_FORMAT = struct.Struct('<I3fhH')
 
 def _process_star(
     f: BinaryIO,
-    id_idx: Mapping[int, int],
-) -> Optional[Tuple[int, int, float, float, float, int]]:
+    id_idx: dict[int, int],
+) -> Optional[tuple[int, int, float, float, float, int]]:
     star = f.read(20)
     if len(star) != 20:
         raise EOFError("Unexpected end-of-file")
